@@ -1,4 +1,5 @@
 from pathlib import Path
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -41,7 +42,7 @@ c1.metric("Selected analyses", f"{len(subset):,}")
 c2.metric("Coordinate pairs", f"{len(subset[['Latitude', 'Longitude']].dropna().drop_duplicates()):,}")
 c3.metric("Geological units", f"{subset['Unit'].nunique():,}")
 
-tab_data, tab_map, tab_chem, tab_pt = st.tabs(["Data explorer", "Sample map", "Garnet chemistry", "Pressure–temperature"])
+tab_data, tab_map, tab_chem, tab_pt, tab_up = st.tabs(["Data explorer", "Sample map", "Garnet chemistry", "Pressure–temperature", "Compare your garnets"])
 
 with tab_data:
     st.subheader("Bedrock garnet analyses")
@@ -104,6 +105,75 @@ with tab_pt:
         st.caption(f"{len(pt):,} of {len(subset):,} selected analyses include both values.")
     else:
         st.info("No selected analyses contain both pressure and temperature values.")
+
+with tab_up:
+    st.subheader("Upload and compare your garnet compositions")
+    st.caption("Upload a CSV with endmember columns (mol %). Your data is compared with the analyses currently selected in the sidebar and is not stored.")
+    comps = ["Almandine_%", "Spessartine_%", "Pyrope_%", "Grossular_%"]
+    template = pd.DataFrame({"Sample_ID": ["Example-1"], "Almandine_%": [65.0], "Spessartine_%": [5.0],
+                             "Pyrope_%": [12.0], "Grossular_%": [18.0]})
+    st.download_button("Download CSV template", data=template.to_csv(index=False).encode("utf-8"),
+                       file_name="garnet_upload_template.csv", mime="text/csv")
+    uploaded = st.file_uploader("Upload CSV", type="csv")
+    if uploaded is not None:
+        try:
+            user = pd.read_csv(uploaded)
+        except Exception:
+            st.error("Could not read the file as CSV.")
+            st.stop()
+        missing = [c for c in comps if c not in user.columns]
+        if missing:
+            st.error("Missing required columns: " + ", ".join(missing))
+        else:
+            if "Sample_ID" not in user.columns:
+                user.insert(0, "Sample_ID", [f"Upload-{i + 1}" for i in range(len(user))])
+            for c in comps:
+                user[c] = pd.to_numeric(user[c], errors="coerce")
+            user = user.dropna(subset=comps).reset_index(drop=True)
+            ref = subset.dropna(subset=comps)
+            if user.empty:
+                st.warning("No rows with complete numeric endmember values.")
+            elif ref.empty:
+                st.info("No database analyses match the sidebar filters.")
+            else:
+                st.success(f"{len(user):,} uploaded analyses compared with {len(ref):,} database analyses.")
+                u1, u2 = st.columns(2)
+                ux = u1.selectbox("X-axis", comps, index=2, key="up_x")
+                uy = u2.selectbox("Y-axis", comps, index=3, key="up_y")
+                fig = px.scatter(ref, x=ux, y=uy, color="Lithology_Category", opacity=0.4,
+                                 hover_data=["Garnet_ID", "Unit", "State"], render_mode="webgl")
+                fig.add_scatter(x=user[ux], y=user[uy], mode="markers", name="Your samples", text=user["Sample_ID"],
+                                marker=dict(color="black", size=11, symbol="star", line=dict(color="white", width=1)))
+                fig.update_layout(legend_title_text="Lithology", height=560)
+                st.plotly_chart(fig, use_container_width=True)
+
+                st.markdown("**Percentile of each uploaded sample within the selected database analyses**")
+                pct = user[["Sample_ID"]].copy()
+                for c in comps:
+                    pct[c.replace("_%", " pctl")] = [round(100 * (ref[c] <= v).mean(), 1) for v in user[c]]
+                st.dataframe(pct, use_container_width=True, hide_index=True)
+
+                st.markdown("**Closest database match (Aitchison distance)**")
+                st.caption("Endmembers are closed to 100%, zeros are replaced with 0.01 before the centered log-ratio (clr) transform, and distance is Euclidean in clr space.")
+
+                def clr(values):
+                    arr = np.clip(np.asarray(values, dtype=float), 0.01, None)
+                    arr = arr / arr.sum(axis=-1, keepdims=True)
+                    logs = np.log(arr)
+                    return logs - logs.mean(axis=-1, keepdims=True)
+
+                ref_clr = clr(ref[comps].to_numpy())
+                rows = []
+                for _, r in user.iterrows():
+                    d = np.linalg.norm(ref_clr - clr(r[comps].to_numpy()), axis=1)
+                    best = ref.iloc[int(d.argmin())]
+                    rows.append({"Sample_ID": r["Sample_ID"], "Closest Garnet_ID": best["Garnet_ID"],
+                                 "Distance": round(float(d.min()), 2), "Lithology": best["Lithology_Category"],
+                                 "Unit": best["Unit"], "State": best["State"]})
+                matches_df = pd.DataFrame(rows)
+                st.dataframe(matches_df, use_container_width=True, hide_index=True)
+                st.download_button("Download matches CSV", data=matches_df.to_csv(index=False).encode("utf-8"),
+                                   file_name="garnet_closest_matches.csv", mime="text/csv")
 
 st.divider()
 st.caption("Source: uploaded Southern Appalachian bedrock garnet compilation. Interpret sample locations, lithologies, and P–T values in their original geological context.")
