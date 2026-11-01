@@ -4,9 +4,98 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-st.set_page_config(page_title="Southern Appalachian Garnet Explorer", page_icon="💎", layout="wide")
-st.title("Southern Appalachian Bedrock Garnet Explorer")
-st.caption("Explore individual bedrock garnet compositions, geological context, and sample localities.")
+st.set_page_config(page_title="Southern Appalachian Garnet Analysis Database", page_icon="💎", layout="wide")
+
+st.markdown(
+    """
+    <style>
+    :root {
+        --garnet-red: #8f1d2c;
+        --garnet-red-dark: #681522;
+        --garnet-rose: #fbf3f3;
+    }
+    .stApp {
+        background: linear-gradient(180deg, #fffafa 0, #ffffff 340px);
+    }
+    [data-testid="stHeader"] {
+        background: rgba(255, 250, 250, 0.85);
+    }
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+        max-width: 1440px;
+    }
+    h1 {
+        color: var(--garnet-red-dark);
+        letter-spacing: -0.035em;
+        font-weight: 750;
+    }
+    [data-testid="stCaptionContainer"] {
+        color: #66565a;
+    }
+    [data-testid="stSidebar"] {
+        background: var(--garnet-rose);
+        border-right: 1px solid #f0dddd;
+    }
+    [data-testid="stMetric"] {
+        background: #ffffff;
+        border: 1px solid #f0dddd;
+        border-top: 3px solid var(--garnet-red);
+        border-radius: 0.65rem;
+        padding: 1rem 1.1rem;
+        box-shadow: 0 3px 12px rgba(104, 21, 34, 0.05);
+    }
+    [data-testid="stMetricLabel"] {
+        color: #66565a;
+    }
+    [data-baseweb="tab-list"] {
+        gap: 0.35rem;
+        border-bottom: 1px solid #ead7da;
+    }
+    [data-baseweb="tab"] {
+        color: #66565a;
+    }
+    [data-baseweb="tab"][aria-selected="true"] {
+        color: var(--garnet-red);
+        border-bottom-color: var(--garnet-red);
+    }
+    .stButton > button, .stDownloadButton > button {
+        border-color: var(--garnet-red);
+        color: var(--garnet-red);
+        border-radius: 0.5rem;
+    }
+    .stButton > button:hover, .stDownloadButton > button:hover {
+        background: var(--garnet-red);
+        color: #ffffff;
+        border-color: var(--garnet-red);
+    }
+    a {
+        color: var(--garnet-red);
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+px.defaults.color_discrete_sequence = [
+    "#8f1d2c", "#bd3947", "#d96b72", "#6f2735", "#e7a1a4", "#a94c59"
+]
+
+st.title("Southern Appalachian Garnet Analysis Database")
+st.markdown(
+    "A professional, geochemically curated database of Southern Appalachian garnet "
+    "analyses with filtering, comparison, and reporting tools."
+)
+st.caption("Dataset version 1.0")
+
+with st.expander("Dataset citation"):
+    st.markdown(
+        'Catlos, Elizabeth, 2026, "Replication Data for: Southern Appalachian Bedrock '
+        'Garnet Chemistry and Geological Metadata: A Reference Dataset for Sediment '
+        'Provenance Studies", [Texas Data Repository, V1]'
+        '(https://doi.org/10.18738/T8/0NBJBO), '
+        "UNF:6:PPyEsTark79lKeuf1Feq0g== [fileUNF]."
+    )
 
 DATA_FILE = Path(__file__).parent / "Final_Database.csv"
 
