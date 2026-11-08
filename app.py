@@ -81,21 +81,8 @@ px.defaults.color_discrete_sequence = [
     "#8f1d2c", "#bd3947", "#d96b72", "#6f2735", "#e7a1a4", "#a94c59"
 ]
 
-st.title("Southern Appalachian Garnet Analysis Database")
-st.markdown(
-    "A professional, geochemically curated database of Southern Appalachian garnet "
-    "analyses with filtering, comparison, and reporting tools."
-)
-st.caption("Dataset version 1.0")
-
-with st.expander("Dataset citation"):
-    st.markdown(
-        'Catlos, Elizabeth, 2026, "Replication Data for: Southern Appalachian Bedrock '
-        'Garnet Chemistry and Geological Metadata: A Reference Dataset for Sediment '
-        'Provenance Studies", [Texas Data Repository, V1]'
-        '(https://doi.org/10.18738/T8/0NBJBO), '
-        "UNF:6:PPyEsTark79lKeuf1Feq0g== [fileUNF]."
-    )
+st.title("Southern Appalachian Garnet")
+st.caption("Select sample locations on the map to focus the analyses below.")
 
 DATA_FILE = Path(__file__).parent / "Final_Database.csv"
 
@@ -126,30 +113,95 @@ with st.sidebar:
         subset = subset[matches]
     st.caption("Lithology and unit names are displayed exactly as provided in the source CSV.")
 
+st.caption(
+    "Each marker represents one unique coordinate pair; marker size indicates the number "
+    "of analyses at that location."
+)
+map_sites = (
+    df.dropna(subset=["Latitude", "Longitude"])
+    .groupby(["Latitude", "Longitude"], as_index=False)
+    .agg(State=("State", "first"), analyses=("Garnet_ID", "size"), units=("Unit", "nunique"))
+    .reset_index(drop=True)
+)
+if not map_sites.empty:
+    fig_map = px.scatter_map(
+        map_sites,
+        lat="Latitude",
+        lon="Longitude",
+        size="analyses",
+        size_max=18,
+        hover_name="State",
+        hover_data={"analyses": True, "units": True, "Latitude": True, "Longitude": True},
+        zoom=5.5,
+        height=560,
+    )
+    fig_map.update_traces(marker_color="#8f1d2c")
+    fig_map.update_layout(
+        map_style="open-street-map",
+        map_center={"lat": 36.6, "lon": -81.5},
+        margin=dict(l=0, r=0, t=0, b=0),
+    )
+    if "map_widget_version" not in st.session_state:
+        st.session_state["map_widget_version"] = 0
+    map_event = st.plotly_chart(
+        fig_map,
+        use_container_width=True,
+        key=f"sample_map_{st.session_state['map_widget_version']}",
+        on_select="rerun",
+        selection_mode=("points", "box", "lasso"),
+    )
+    selected_site_indices = {
+        int(point["point_index"])
+        for point in map_event["selection"]["points"]
+        if point.get("point_index") is not None
+    }
+    selected_site_indices = {
+        index for index in selected_site_indices if 0 <= index < len(map_sites)
+    }
+    if selected_site_indices:
+        selected_sites = map_sites.iloc[sorted(selected_site_indices)]
+        selected_coordinates = set(
+            selected_sites[["Latitude", "Longitude"]].itertuples(index=False, name=None)
+        )
+        subset = subset[
+            subset[["Latitude", "Longitude"]]
+            .apply(tuple, axis=1)
+            .isin(selected_coordinates)
+        ]
+        st.caption(
+            f"{len(selected_site_indices):,} map location(s) selected · "
+            f"{len(subset):,} matching analyses after sidebar filters."
+        )
+    else:
+        st.caption("No map locations selected; results include all locations matching the sidebar filters.")
+    if st.button("Clear map selection", disabled=not selected_site_indices):
+        st.session_state["map_widget_version"] += 1
+        st.rerun()
+else:
+    st.info("No sample coordinates are available to display.")
+
+st.caption("Dataset version 1.0")
+with st.expander("Dataset citation"):
+    st.markdown(
+        'Catlos, Elizabeth, 2026, "Replication Data for: Southern Appalachian Bedrock '
+        'Garnet Chemistry and Geological Metadata: A Reference Dataset for Sediment '
+        'Provenance Studies", [Texas Data Repository, V1]'
+        '(https://doi.org/10.18738/T8/0NBJBO), '
+        "UNF:6:PPyEsTark79lKeufq0g== [fileUNF]."
+    )
+
 c1, c2, c3 = st.columns(3)
 c1.metric("Selected analyses", f"{len(subset):,}")
 c2.metric("Coordinate pairs", f"{len(subset[['Latitude', 'Longitude']].dropna().drop_duplicates()):,}")
 c3.metric("Geological units", f"{subset['Unit'].nunique():,}")
 
-tab_data, tab_map, tab_chem, tab_pt, tab_up = st.tabs(["Data explorer", "Sample map", "Garnet chemistry", "Pressure–temperature", "Compare your garnets"])
+tab_data, tab_chem, tab_pt, tab_up = st.tabs(["Data explorer", "Garnet chemistry", "Pressure–temperature", "Compare your garnets"])
 
 with tab_data:
     st.subheader("Bedrock garnet analyses")
     st.dataframe(subset, use_container_width=True, hide_index=True)
     st.download_button("Download filtered CSV", data=subset.to_csv(index=False).encode("utf-8"),
                        file_name="southern_appalachian_garnet_filtered.csv", mime="text/csv")
-
-with tab_map:
-    st.subheader("Sample localities")
-    st.caption("One marker per unique coordinate pair. Markers indicate sample locations, not individual grains.")
-    points = subset.dropna(subset=["Latitude", "Longitude"])
-    if not points.empty:
-        sites = (points.groupby(["Latitude", "Longitude"], as_index=False)
-                 .agg(analyses=("Garnet_ID", "size"), units=("Unit", "nunique")))
-        st.map(sites.rename(columns={"Latitude": "latitude", "Longitude": "longitude"}))
-        st.dataframe(sites, use_container_width=True, hide_index=True)
-    else:
-        st.info("No mapped samples match these filters.")
 
 with tab_chem:
     st.subheader("Garnet endmember compositions")
